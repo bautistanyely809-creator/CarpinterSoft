@@ -65,6 +65,14 @@ class ApiController {
                 echo json_encode($_SESSION['cart'] ?? []);
                 break;
 
+            case 'ai/chat':
+                $input = json_decode(file_get_contents('php://input'), true) ?? $_POST;
+                $msg = $input['message'] ?? '';
+                $context = $input['context'] ?? [];
+                $result = \App\Services\CarpinterAIService::chat($msg, $context);
+                echo json_encode($result);
+                break;
+
             default:
                 http_response_code(404);
                 echo json_encode(['error' => 'Endpoint no encontrado']);

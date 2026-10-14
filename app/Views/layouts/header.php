@@ -96,6 +96,11 @@ $currentRoute = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
                 <a href="/nesting" class="px-3 py-2 rounded-lg transition-colors <?= str_starts_with($currentRoute, '/nesting') ? 'bg-surface-container text-primary font-bold' : 'text-text-muted hover:text-primary hover:bg-surface-container-low' ?>">
                     Despiece CNC
                 </a>
+                <a href="/ai" class="px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 <?= str_starts_with($currentRoute, '/ai') ? 'bg-secondary-container text-white font-bold shadow-xs' : 'text-text-muted hover:text-primary hover:bg-surface-container-low' ?>">
+                    <span class="material-symbols-outlined text-[16px] <?= str_starts_with($currentRoute, '/ai') ? 'text-white' : 'text-secondary-container' ?>">psychology</span>
+                    <span>CarpinterAI</span>
+                    <span class="px-1.5 py-0.5 rounded text-[9px] font-mono uppercase font-extrabold <?= str_starts_with($currentRoute, '/ai') ? 'bg-white/20 text-white' : 'bg-secondary-container/15 text-secondary-container' ?>">IA</span>
+                </a>
             </nav>
 
             <!-- Actions: Cart & Quick CTA -->

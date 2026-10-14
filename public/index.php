@@ -78,6 +78,10 @@ switch ($uri) {
         (new \App\Controllers\CheckoutController())->index();
         break;
 
+    case '/ai':
+        (new \App\Controllers\AiController())->index();
+        break;
+
     case '/cart/add':
         (new \App\Controllers\CheckoutController())->add();
         break;
