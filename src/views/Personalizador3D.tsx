@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { AppView, CustomizerState, CartItem } from '../types';
 import { WOOD_OPTIONS, FURNITURE_MODELS } from '../data/furnitureData';
 import { Interactive3DViewport } from '../components/Interactive3DViewport';
@@ -14,9 +14,16 @@ export const Personalizador3D: React.FC<Personalizador3DProps> = ({
   onNavigate,
   onAddToCart
 }) => {
-  const currentModel = useMemo(() => {
-    return FURNITURE_MODELS.find(m => m.id === initialModelId) || FURNITURE_MODELS[0];
+  const [selectedModelId, setSelectedModelId] = useState(initialModelId);
+
+  // Sync when initialModelId prop changes
+  useEffect(() => {
+    setSelectedModelId(initialModelId);
   }, [initialModelId]);
+
+  const currentModel = useMemo(() => {
+    return FURNITURE_MODELS.find(m => m.id === selectedModelId) || FURNITURE_MODELS[0];
+  }, [selectedModelId]);
 
   // Main Parametric Customizer State
   const [state, setState] = useState<CustomizerState>({
@@ -37,6 +44,17 @@ export const Personalizador3D: React.FC<Personalizador3DProps> = ({
     lighting: 'nordic',
     zoom: 1
   });
+
+  // When model changes, update state parameters
+  useEffect(() => {
+    setState(prev => ({
+      ...prev,
+      modelId: currentModel.id,
+      width: currentModel.baseWidth,
+      height: currentModel.baseHeight,
+      depth: currentModel.baseDepth,
+    }));
+  }, [currentModel]);
 
   const [activeTab, setActiveTab] = useState<'dims' | 'wood' | 'hardware' | 'ai'>('dims');
   const [showARModal, setShowARModal] = useState(false);
@@ -94,17 +112,20 @@ export const Personalizador3D: React.FC<Personalizador3DProps> = ({
 
   // Real-Time Algorithmic Cost Engine
   const quotation = useMemo(() => {
-    const vol = Number(((state.width * state.height * state.depth) * 0.000001 * 0.26).toFixed(2));
-    const baseWoodCost = Math.round(vol * 3770) + selectedWood.extraPrice;
-    const baseCNCCost = Math.round(320 + (state.width * 0.5));
-    const hardwareCost = 145 + ((state.modules - 3) * 35);
-    const finishCost = 130 + Math.round((state.width - 180) * 0.3);
+    const baseVol = (currentModel.baseWidth * currentModel.baseHeight * currentModel.baseDepth) * 0.000001;
+    const currentVol = (state.width * state.height * state.depth) * 0.000001;
+    const volRatio = currentVol / Math.max(0.08, baseVol);
+
+    const baseWoodCost = Math.round(currentModel.basePrice * 0.60 * Math.pow(volRatio, 0.75)) + selectedWood.extraPrice;
+    const baseCNCCost = Math.round(currentModel.basePrice * 0.22 + (state.width * 0.35));
+    const hardwareCost = Math.round(currentModel.basePrice * 0.10 + ((state.modules - 2) * 25));
+    const finishCost = state.finishType === 'rubio' ? 110 : 80;
     const baseCost = state.baseType === 'zocalo' ? 45 : state.baseType === 'flotante' ? 80 : 0;
     const extras = (state.hasLed ? 65 : 0) + (state.hasCableGrommet ? 30 : 0) + baseCost;
 
     const total = baseWoodCost + baseCNCCost + hardwareCost + finishCost + extras;
     return {
-      volume: vol,
+      volume: Number((currentVol * 0.26).toFixed(2)),
       woodCost: baseWoodCost,
       cncCost: baseCNCCost,
       hardwareCost,
@@ -112,7 +133,7 @@ export const Personalizador3D: React.FC<Personalizador3DProps> = ({
       extrasCost: extras,
       total
     };
-  }, [state, selectedWood]);
+  }, [state, selectedWood, currentModel]);
 
   const handleAddToCart = () => {
     const item: CartItem = {
@@ -173,6 +194,21 @@ export const Personalizador3D: React.FC<Personalizador3DProps> = ({
               <h1 className="font-headline-sm text-lg md:text-xl text-text-primary font-bold tracking-tight">
                 {currentModel.name}
               </h1>
+
+              {/* Selector Rápido de Modelo */}
+              <select
+                value={selectedModelId}
+                onChange={(e) => setSelectedModelId(e.target.value)}
+                className="font-label-technical text-xs bg-surface-container hover:bg-surface-container-high text-text-primary px-3 py-1.5 rounded-lg border border-border-subtle cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary font-semibold"
+                title="Cambiar modelo a personalizar"
+              >
+                {FURNITURE_MODELS.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.category})
+                  </option>
+                ))}
+              </select>
+
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-primary/10 text-text-primary font-label-technical text-[11px] uppercase font-semibold">
                 <span className="w-1.5 h-1.5 rounded-full bg-state-success animate-pulse"></span>
                 Modelo 100% Paramétrico 3D
@@ -303,7 +339,7 @@ export const Personalizador3D: React.FC<Personalizador3DProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="font-label-technical text-xs text-text-primary font-semibold uppercase flex items-center gap-1">
                     <span>Ancho Total (W)</span>
-                    <span className="text-text-muted font-normal">120 - 260 cm</span>
+                    <span className="text-text-muted font-normal">{currentModel.minWidth} - {currentModel.maxWidth} cm</span>
                   </label>
                   <div className="flex items-center gap-1 bg-surface-card px-2 py-0.5 rounded shadow-sm border border-border-subtle">
                     <span className="font-label-numeric text-sm text-text-primary font-bold">{state.width.toFixed(1)}</span>
@@ -312,8 +348,8 @@ export const Personalizador3D: React.FC<Personalizador3DProps> = ({
                 </div>
                 <input
                   type="range"
-                  min="120"
-                  max="260"
+                  min={currentModel.minWidth}
+                  max={currentModel.maxWidth}
                   step="1"
                   value={state.width}
                   onChange={(e) => updateState(s => ({ ...s, width: Number(e.target.value) }))}
@@ -322,13 +358,13 @@ export const Personalizador3D: React.FC<Personalizador3DProps> = ({
                 <div className="flex items-center justify-between pt-1">
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => updateState(s => ({ ...s, width: Math.max(120, s.width - 5) }))}
+                      onClick={() => updateState(s => ({ ...s, width: Math.max(currentModel.minWidth, s.width - 5) }))}
                       className="px-2 py-0.5 rounded bg-surface-card hover:bg-surface-container font-label-technical text-[11px] text-text-primary font-semibold transition-colors shadow-sm cursor-pointer"
                     >
                       -5cm
                     </button>
                     <button
-                      onClick={() => updateState(s => ({ ...s, width: Math.min(260, s.width + 5) }))}
+                      onClick={() => updateState(s => ({ ...s, width: Math.min(currentModel.maxWidth, s.width + 5) }))}
                       className="px-2 py-0.5 rounded bg-surface-card hover:bg-surface-container font-label-technical text-[11px] text-text-primary font-semibold transition-colors shadow-sm cursor-pointer"
                     >
                       +5cm
@@ -336,13 +372,13 @@ export const Personalizador3D: React.FC<Personalizador3DProps> = ({
                   </div>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => updateState(s => ({ ...s, width: Math.max(120, Number((s.width - 0.1).toFixed(1))) }))}
+                      onClick={() => updateState(s => ({ ...s, width: Math.max(currentModel.minWidth, Number((s.width - 0.1).toFixed(1))) }))}
                       className="px-1.5 py-0.5 rounded bg-surface-card hover:bg-surface-container font-label-technical text-[11px] text-text-muted transition-colors shadow-sm cursor-pointer"
                     >
                       -1mm
                     </button>
                     <button
-                      onClick={() => updateState(s => ({ ...s, width: Math.min(260, Number((s.width + 0.1).toFixed(1))) }))}
+                      onClick={() => updateState(s => ({ ...s, width: Math.min(currentModel.maxWidth, Number((s.width + 0.1).toFixed(1))) }))}
                       className="px-1.5 py-0.5 rounded bg-surface-card hover:bg-surface-container font-label-technical text-[11px] text-text-muted transition-colors shadow-sm cursor-pointer"
                     >
                       +1mm
@@ -356,7 +392,7 @@ export const Personalizador3D: React.FC<Personalizador3DProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="font-label-technical text-xs text-text-primary font-semibold uppercase flex items-center gap-1">
                     <span>Altura Total (H)</span>
-                    <span className="text-text-muted font-normal">65 - 105 cm</span>
+                    <span className="text-text-muted font-normal">{currentModel.minHeight} - {currentModel.maxHeight} cm</span>
                   </label>
                   <div className="flex items-center gap-1 bg-surface-card px-2 py-0.5 rounded shadow-sm border border-border-subtle">
                     <span className="font-label-numeric text-sm text-text-primary font-bold">{state.height.toFixed(1)}</span>
@@ -365,17 +401,17 @@ export const Personalizador3D: React.FC<Personalizador3DProps> = ({
                 </div>
                 <input
                   type="range"
-                  min="65"
-                  max="105"
+                  min={currentModel.minHeight}
+                  max={currentModel.maxHeight}
                   step="1"
                   value={state.height}
                   onChange={(e) => updateState(s => ({ ...s, height: Number(e.target.value) }))}
                   className="w-full accent-secondary-container cursor-pointer h-1.5 bg-surface-container-high rounded-lg"
                 />
                 <div className="flex items-center justify-between text-[10px] font-label-technical text-text-muted">
-                  <span onClick={() => updateState(s => ({ ...s, height: 65 }))} className="cursor-pointer hover:text-text-primary">65cm (Consola baja)</span>
-                  <span onClick={() => updateState(s => ({ ...s, height: 85 }))} className="cursor-pointer hover:text-text-primary">85cm (Estándar)</span>
-                  <span onClick={() => updateState(s => ({ ...s, height: 105 }))} className="cursor-pointer hover:text-text-primary">105cm (Alto)</span>
+                  <span onClick={() => updateState(s => ({ ...s, height: currentModel.minHeight }))} className="cursor-pointer hover:text-text-primary">{currentModel.minHeight}cm (Mín)</span>
+                  <span onClick={() => updateState(s => ({ ...s, height: currentModel.baseHeight }))} className="cursor-pointer hover:text-text-primary">{currentModel.baseHeight}cm (Base)</span>
+                  <span onClick={() => updateState(s => ({ ...s, height: currentModel.maxHeight }))} className="cursor-pointer hover:text-text-primary">{currentModel.maxHeight}cm (Máx)</span>
                 </div>
               </div>
 
@@ -384,7 +420,7 @@ export const Personalizador3D: React.FC<Personalizador3DProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="font-label-technical text-xs text-text-primary font-semibold uppercase flex items-center gap-1">
                     <span>Profundidad (D)</span>
-                    <span className="text-text-muted font-normal">35 - 60 cm</span>
+                    <span className="text-text-muted font-normal">{currentModel.minDepth} - {currentModel.maxDepth} cm</span>
                   </label>
                   <div className="flex items-center gap-1 bg-surface-card px-2 py-0.5 rounded shadow-sm border border-border-subtle">
                     <span className="font-label-numeric text-sm text-text-primary font-bold">{state.depth.toFixed(1)}</span>
@@ -393,36 +429,61 @@ export const Personalizador3D: React.FC<Personalizador3DProps> = ({
                 </div>
                 <input
                   type="range"
-                  min="35"
-                  max="60"
+                  min={currentModel.minDepth}
+                  max={currentModel.maxDepth}
                   step="1"
                   value={state.depth}
                   onChange={(e) => updateState(s => ({ ...s, depth: Number(e.target.value) }))}
                   className="w-full accent-secondary-container cursor-pointer h-1.5 bg-surface-container-high rounded-lg"
                 />
-                <span className="text-[11px] font-body-sm text-text-muted">Fondo óptimo para vajilla y equipos audiovisuales estándar.</span>
+                <span className="text-[11px] font-body-sm text-text-muted">{currentModel.productionNote || 'Dimensionamiento estructural verificado por CNC.'}</span>
               </div>
 
-              {/* Module Doors */}
+              {/* Module Doors / Divisions */}
               <div className="flex flex-col gap-2">
-                <span className="font-label-technical text-xs text-text-primary font-semibold uppercase">Cuerpos & Módulos</span>
+                <span className="font-label-technical text-xs text-text-primary font-semibold uppercase">
+                  {currentModel.id === 'fusion-table'
+                    ? 'Capacidad & Distribución'
+                    : currentModel.id === 'nexus-bookshelf'
+                    ? 'Niveles & Baldas Interiores'
+                    : currentModel.id === 'veta-tv'
+                    ? 'Cuerpos de Trampilla Abatible'
+                    : currentModel.id === 'studio-desk'
+                    ? 'Módulos de Almacenamiento'
+                    : 'Cuerpos & Módulos'}
+                </span>
                 <div className="grid grid-cols-3 gap-2">
-                  {[2, 3, 4].map(m => (
-                    <button
-                      key={m}
-                      onClick={() => updateState(s => ({ ...s, modules: m }), 'Módulos Actualizados', `Configurado para ${m} puertas.`)}
-                      className={`p-2 rounded-lg text-center flex flex-col items-center gap-0.5 transition-all cursor-pointer ${
-                        state.modules === m
-                          ? 'bg-primary-container text-white shadow-sm'
-                          : 'bg-surface-container hover:bg-surface-container-high text-text-primary'
-                      }`}
-                    >
-                      <span className="font-headline-sm text-base font-bold">{m}</span>
-                      <span className="font-label-technical text-[10px] opacity-80">
-                        {m === 2 ? 'Doble Puerta' : m === 3 ? '3 Puertas (Ideal)' : '4 Módulos'}
-                      </span>
-                    </button>
-                  ))}
+                  {[2, 3, 4].map(m => {
+                    let sublabel = '';
+                    if (currentModel.id === 'fusion-table') {
+                      sublabel = m === 2 ? '6 Comensales' : m === 3 ? '8 Comensales' : '10-12 Comensales';
+                    } else if (currentModel.id === 'nexus-bookshelf') {
+                      sublabel = m === 2 ? '3 Alturas' : m === 3 ? '4 Alturas' : '5 Alturas';
+                    } else if (currentModel.id === 'veta-tv') {
+                      sublabel = m === 2 ? '2 Trampillas' : m === 3 ? '3 Trampillas' : '4 Trampillas';
+                    } else if (currentModel.id === 'studio-desk') {
+                      sublabel = m === 2 ? 'Simple' : m === 3 ? 'Cajonera Der.' : 'Doble Cajón';
+                    } else {
+                      sublabel = m === 2 ? 'Doble Puerta' : m === 3 ? '3 Puertas' : '4 Módulos';
+                    }
+
+                    return (
+                      <button
+                        key={m}
+                        onClick={() => updateState(s => ({ ...s, modules: m }), 'Configuración Actualizada', `Configurado para ${m} módulos.`)}
+                        className={`p-2 rounded-lg text-center flex flex-col items-center gap-0.5 transition-all cursor-pointer ${
+                          state.modules === m
+                            ? 'bg-primary-container text-white shadow-sm'
+                            : 'bg-surface-container hover:bg-surface-container-high text-text-primary'
+                        }`}
+                      >
+                        <span className="font-headline-sm text-base font-bold">{m}</span>
+                        <span className="font-label-technical text-[10px] opacity-80 truncate w-full">
+                          {sublabel}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -440,7 +501,11 @@ export const Personalizador3D: React.FC<Personalizador3DProps> = ({
                         onChange={() => updateState(s => ({ ...s, baseType: 'conicas' }))}
                         className="accent-secondary-container"
                       />
-                      Patas Cónicas Torneadas 15 cm
+                      {currentModel.id === 'fusion-table'
+                        ? 'Patas Macizas 80x80mm Niveladas'
+                        : currentModel.id === 'veta-tv'
+                        ? 'Patas Cónicas de Suelo 12 cm'
+                        : 'Patas Cónicas Torneadas 15 cm'}
                     </span>
                     <span className="font-label-technical text-[11px] text-state-success font-semibold">Incluido</span>
                   </label>
@@ -455,7 +520,9 @@ export const Personalizador3D: React.FC<Personalizador3DProps> = ({
                         onChange={() => updateState(s => ({ ...s, baseType: 'zocalo' }))}
                         className="accent-secondary-container"
                       />
-                      Zócalo Retranqueado Continuo
+                      {currentModel.id === 'fusion-table'
+                        ? 'Bastidor Caballete Reforzado'
+                        : 'Zócalo Retranqueado Continuo'}
                     </span>
                     <span className="font-label-technical text-[11px] text-text-muted">+45 €</span>
                   </label>
@@ -470,7 +537,9 @@ export const Personalizador3D: React.FC<Personalizador3DProps> = ({
                         onChange={() => updateState(s => ({ ...s, baseType: 'flotante' }))}
                         className="accent-secondary-container"
                       />
-                      Suspensión Flotante a Pared
+                      {currentModel.id === 'veta-tv'
+                        ? 'Suspensión Flotante Camar® 90kg'
+                        : 'Suspensión Flotante a Pared'}
                     </span>
                     <span className="font-label-technical text-[11px] text-text-muted">+80 €</span>
                   </label>
